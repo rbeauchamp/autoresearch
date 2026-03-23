@@ -91,7 +91,22 @@ d4e5f6g	0.000000	0.0	crash	double model width (OOM)
 
 The experiment runs on a dedicated branch (e.g. `autoresearch/mar5` or `autoresearch/mar5-gpu0`).
 
-LOOP FOREVER:
+The loop has two levels: an **inner loop** (run experiments) and an **outer loop** (review strategy). Most of the time you're in the inner loop. The outer loop triggers automatically when you stall.
+
+### Strategy tracking
+
+Before your first experiment, initialize your strategy state:
+
+- **Current strategy**: a 1-2 sentence description of the approach you're currently exploring (e.g. "trying different activation functions", "scaling model width", "optimizer changes").
+- **Hypothesis**: what you believe and why (e.g. "GeLU should outperform ReLU because it provides smoother gradients").
+- **Kill criterion**: when you'll abandon this strategy (e.g. "if 5 experiments in this direction show no improvement, pivot").
+- **Experiments since last improvement**: 0
+
+Write these down in your working notes (not committed). Update them as you go.
+
+### Inner loop: experiment
+
+LOOP:
 
 1. Look at the git state: the current branch/commit we're on
 2. Tune `train.py` with an experimental idea by directly hacking the code.
@@ -100,15 +115,30 @@ LOOP FOREVER:
 5. Read out the results: `grep "^val_bpb:\|^peak_vram_mb:" run.log`
 6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
 7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
-8. If val_bpb improved (lower), you "advance" the branch, keeping the git commit
-9. If val_bpb is equal or worse, you git reset back to where you started
+8. If val_bpb improved (lower): advance the branch, keeping the git commit. Reset experiments-since-improvement to 0.
+9. If val_bpb is equal or worse: git reset back to where you started. Increment experiments-since-improvement.
+10. **If experiments-since-improvement >= kill criterion: go to the outer loop (strategy review).** Otherwise, continue the inner loop.
 
-The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
+### Outer loop: strategy review
+
+When the kill criterion triggers, STOP experimenting and reflect:
+
+1. **Diagnose**: Re-read `results.tsv`. What was the trend? Did the last N experiments cluster around the same val_bpb, or was there any signal? Write 2-3 sentences on *why* this strategy stalled. Be specific — "the model is already at the architecture's capacity" is better than "it didn't work."
+
+2. **Decide**: Is this a **local plateau** (the approach has more room but you've been making the wrong tweaks) or a **ceiling** (this entire category of changes is exhausted)? If plateau, refine your strategy with a new angle within the same approach. If ceiling, **pivot to a qualitatively different approach** — not a parameter variation, but a different *kind* of change (e.g. if you've been tuning hyperparameters, switch to architectural changes; if you've been changing the optimizer, try a different training technique).
+
+3. **Set a new strategy**: Write down a new strategy, hypothesis, and kill criterion. The kill criterion should be concrete (e.g. "5 experiments" or "3 experiments if none improve by at least 0.005").
+
+4. **Resume the inner loop** with the new strategy.
+
+The outer loop prevents degeneration into random search. A research loop without self-reflection is just a search algorithm. The strategy review forces you to distinguish "this needs more tuning" from "this direction is exhausted" — the single most important judgment call in research.
+
+### Guidelines
 
 **Timeout**: Each experiment should take ~5 minutes total (+ a few seconds for startup and eval overhead). If a run exceeds 10 minutes, kill it and treat it as a failure (discard and revert).
 
 **Crashes**: If a run crashes (OOM, or a bug, or etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
 
-**NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, think harder — read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
+**NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, trigger a strategy review and think harder — read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
 
 As an example use case, a user might leave you running while they sleep. If each experiment takes you ~5 minutes then you can run approx 12/hour, for a total of about 100 over the duration of the average human sleep. The user then wakes up to experimental results, all completed by you while they slept!
