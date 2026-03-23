@@ -91,6 +91,8 @@ d4e5f6g	0.000000	0.0	crash	double model width (OOM)
 
 The experiment runs on a dedicated branch (e.g. `autoresearch/mar5` or `autoresearch/mar5-gpu0`).
 
+Before your first experiment, write down a **strategy** (what approach you're exploring), a **hypothesis** (why it should work), and a **kill criterion** (e.g. "5 experiments with no meaningful improvement"). Track experiments since last meaningful improvement — where "meaningful" means large enough to be signal, not noise (define your threshold up front, e.g. 0.002 val_bpb).
+
 LOOP FOREVER:
 
 1. Look at the git state: the current branch/commit we're on
@@ -98,17 +100,20 @@ LOOP FOREVER:
 3. git commit
 4. Run the experiment: `uv run train.py > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
 5. Read out the results: `grep "^val_bpb:\|^peak_vram_mb:" run.log`
-6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
+6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up — log "crash", revert, and count it as a non-improving experiment.
 7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
-8. If val_bpb improved (lower), you "advance" the branch, keeping the git commit
-9. If val_bpb is equal or worse, you git reset back to where you started
+8. If val_bpb improved meaningfully (by at least your threshold): advance the branch. Reset experiments-since-improvement to 0.
+9. If val_bpb is equal, worse, or improved less than the threshold: git reset back to where you started. Increment experiments-since-improvement.
+10. **If experiments-since-improvement >= kill criterion, do a strategy review** (see below). Otherwise continue.
 
-The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
+**Strategy review.** When the kill criterion fires, stop and reflect before the next experiment. Re-read `results.tsv` and diagnose *why* this strategy stalled — be specific. Then decide: is this a **plateau** (refine the approach) or a **ceiling** (pivot to a qualitatively different kind of change)? Write down a new strategy, hypothesis, and kill criterion; reset the stall counter. Also track consecutive reviews without a new overall best (increment on each review, reset to 0 only when you set a new best). If that count reaches 3, the next strategy **must** be a qualitative pivot — you may not stay in the same approach family.
+
+The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. The strategy review prevents you from degenerating into random search — a research loop without self-reflection is just a search algorithm.
 
 **Timeout**: Each experiment should take ~5 minutes total (+ a few seconds for startup and eval overhead). If a run exceeds 10 minutes, kill it and treat it as a failure (discard and revert).
 
 **Crashes**: If a run crashes (OOM, or a bug, or etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
 
-**NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, think harder — read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
+**NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, trigger a strategy review and think harder — read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
 
 As an example use case, a user might leave you running while they sleep. If each experiment takes you ~5 minutes then you can run approx 12/hour, for a total of about 100 over the duration of the average human sleep. The user then wakes up to experimental results, all completed by you while they slept!
