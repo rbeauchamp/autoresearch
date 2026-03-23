@@ -91,53 +91,24 @@ d4e5f6g	0.000000	0.0	crash	double model width (OOM)
 
 The experiment runs on a dedicated branch (e.g. `autoresearch/mar5` or `autoresearch/mar5-gpu0`).
 
-The loop has two levels: an **inner loop** (run experiments) and an **outer loop** (review strategy). Most of the time you're in the inner loop. The outer loop triggers automatically when you stall.
+Before your first experiment, write down a **strategy** (what approach you're exploring), a **hypothesis** (why it should work), and a **kill criterion** (e.g. "5 experiments with no meaningful improvement"). Track experiments since last meaningful improvement — where "meaningful" means large enough to be signal, not noise (define your threshold up front, e.g. 0.002 val_bpb).
 
-### Strategy tracking
-
-Before your first experiment, initialize your strategy state:
-
-- **Current strategy**: a 1-2 sentence description of the approach you're currently exploring (e.g. "trying different activation functions", "scaling model width", "optimizer changes").
-- **Hypothesis**: what you believe and why (e.g. "GeLU should outperform ReLU because it provides smoother gradients").
-- **Kill criterion**: when you'll abandon this strategy (e.g. "if 5 experiments in this direction show no improvement, pivot").
-- **Minimum meaningful improvement**: the smallest val_bpb decrease you consider real signal, not noise (e.g. 0.002). Improvements smaller than this do NOT reset the stall counter.
-- **Experiments since last meaningful improvement**: 0
-- **Consecutive strategy reviews without a new best**: 0
-
-Write these down in your working notes (not committed). Update them as you go.
-
-### Inner loop: experiment
-
-LOOP:
+LOOP FOREVER:
 
 1. Look at the git state: the current branch/commit we're on
 2. Tune `train.py` with an experimental idea by directly hacking the code.
 3. git commit
 4. Run the experiment: `uv run train.py > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
 5. Read out the results: `grep "^val_bpb:\|^peak_vram_mb:" run.log`
-6. If the grep output is empty, the run crashed or timed out. Run `tail -n 50 run.log` to read the Python stack trace. If it's a trivial fix (typo, missing import), fix and re-run. Otherwise, log it as a crash in the tsv, git reset, increment experiments-since-meaningful-improvement, and go to step 10.
+6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up — log "crash", revert, and count it as a non-improving experiment.
 7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
-8. If val_bpb improved by at least the **minimum meaningful improvement**: advance the branch, keeping the git commit. Reset experiments-since-meaningful-improvement to 0.
-9. Otherwise (equal, worse, or improved less than the minimum): git reset back to where you started. Increment experiments-since-meaningful-improvement.
-10. **If experiments-since-meaningful-improvement >= kill criterion: go to the outer loop (strategy review).** Otherwise, continue the inner loop.
+8. If val_bpb improved meaningfully (by at least your threshold): advance the branch. Reset experiments-since-improvement to 0.
+9. If val_bpb is equal, worse, or improved less than the threshold: git reset back to where you started. Increment experiments-since-improvement.
+10. **If experiments-since-improvement >= kill criterion, do a strategy review** (see below). Otherwise continue.
 
-### Outer loop: strategy review
+**Strategy review.** When the kill criterion fires, stop and reflect before the next experiment. Re-read `results.tsv` and diagnose *why* this strategy stalled — be specific. Then decide: is this a **plateau** (refine the approach) or a **ceiling** (pivot to a qualitatively different kind of change)? Write down a new strategy, hypothesis, and kill criterion; reset the stall counter. If you've done 3+ consecutive reviews without setting a new overall best, the next strategy **must** be a qualitative pivot — you may not stay in the same approach family.
 
-When the kill criterion triggers, STOP experimenting and reflect:
-
-1. **Diagnose**: Re-read `results.tsv`. What was the trend? Did the last N experiments cluster around the same val_bpb, or was there any signal? Write 2-3 sentences on *why* this strategy stalled. Be specific — "the model is already at the architecture's capacity" is better than "it didn't work."
-
-2. **Decide**: Is this a **local plateau** (the approach has more room but you've been making the wrong tweaks) or a **ceiling** (this entire category of changes is exhausted)? If plateau, refine your strategy with a new angle within the same approach. If ceiling, **pivot to a qualitatively different approach** — not a parameter variation, but a different *kind* of change (e.g. if you've been tuning hyperparameters, switch to architectural changes; if you've been changing the optimizer, try a different training technique).
-
-3. **Set a new strategy**: Write down a new strategy, hypothesis, and kill criterion. Reset experiments-since-meaningful-improvement to 0 (the counter is scoped to each strategy). Increment consecutive-strategy-reviews-without-new-best.
-
-4. **Escalation check**: If consecutive-strategy-reviews-without-new-best >= 3, the next strategy **must** be a qualitative pivot — a fundamentally different kind of change, not a refinement of the same approach family. You may not label the stall as a "plateau" and stay in the same category. Reset this counter to 0 only when a new overall best val_bpb is achieved.
-
-5. **Resume the inner loop** with the new strategy.
-
-The outer loop prevents degeneration into random search. A research loop without self-reflection is just a search algorithm. The strategy review forces you to distinguish "this needs more tuning" from "this direction is exhausted" — the single most important judgment call in research.
-
-### Guidelines
+The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. The strategy review prevents you from degenerating into random search — a research loop without self-reflection is just a search algorithm.
 
 **Timeout**: Each experiment should take ~5 minutes total (+ a few seconds for startup and eval overhead). If a run exceeds 10 minutes, kill it and treat it as a failure (discard and revert).
 
