@@ -106,7 +106,7 @@ LOOP FOREVER:
 9. If val_bpb is equal, worse, or improved less than the threshold: git reset back to where you started. Increment experiments-since-improvement.
 10. **If experiments-since-improvement >= kill criterion, do a strategy review** (see below). Otherwise continue.
 
-**Strategy review.** When the kill criterion fires, stop and reflect before the next experiment. Re-read `results.tsv` and diagnose *why* this strategy stalled — be specific. Then decide: is this a **plateau** (refine the approach) or a **ceiling** (pivot to a qualitatively different kind of change)? Write down a new strategy, hypothesis, and kill criterion; reset the stall counter. If you've done 3+ consecutive reviews without setting a new overall best, the next strategy **must** be a qualitative pivot — you may not stay in the same approach family.
+**Strategy review.** When the kill criterion fires, stop and reflect before the next experiment. Re-read `results.tsv` and diagnose *why* this strategy stalled — be specific. Then decide: is this a **plateau** (refine the approach) or a **ceiling** (pivot to a qualitatively different kind of change)? Write down a new strategy, hypothesis, and kill criterion; reset the stall counter. Also track consecutive reviews without a new overall best (increment on each review, reset to 0 only when you set a new best). If that count reaches 3, the next strategy **must** be a qualitative pivot — you may not stay in the same approach family.
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. The strategy review prevents you from degenerating into random search — a research loop without self-reflection is just a search algorithm.
 
