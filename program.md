@@ -115,7 +115,7 @@ LOOP:
 3. git commit
 4. Run the experiment: `uv run train.py > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
 5. Read out the results: `grep "^val_bpb:\|^peak_vram_mb:" run.log`
-6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
+6. If the grep output is empty, the run crashed or timed out. Run `tail -n 50 run.log` to read the Python stack trace. If it's a trivial fix (typo, missing import), fix and re-run. Otherwise, log it as a crash in the tsv, git reset, increment experiments-since-meaningful-improvement, and go to step 10.
 7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
 8. If val_bpb improved by at least the **minimum meaningful improvement**: advance the branch, keeping the git commit. Reset experiments-since-meaningful-improvement to 0.
 9. Otherwise (equal, worse, or improved less than the minimum): git reset back to where you started. Increment experiments-since-meaningful-improvement.
